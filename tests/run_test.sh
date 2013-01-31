@@ -11,4 +11,4 @@ export PYTHONPATH="${HOME}/twisted_client_for_nimbusio"
 
 PYTHON="python2.7"
 
-"${PYTHON}" "${HOME}/twisted_client_for_nimbusio/tests/test_client.py"
+"${PYTHON}" "${HOME}/twisted_client_for_nimbusio/tests/test_client.py" $@
