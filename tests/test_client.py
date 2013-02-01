@@ -26,6 +26,8 @@ class SetupError(Exception):
 _program_description = "Test twisted_client_for_nimbusio"
 _prefixes = ["prefix_1", "prefix_2", "prefix_4", ]
 _separator = "/"
+_archive_complete_deferred = defer.Deferred()
+_pending_archive_count = 0
 
 def _initialize_logging():
     """initialize the log"""
@@ -90,19 +92,42 @@ def _data_string(length):
     return "".join([random.choice(printable) for _ in range(length)])
 
 def _archive_result(result, key):
-    log.msg("archive %s successful: version = %s" % (
+    global _pending_archive_count
+    _pending_archive_count -= 1
+
+    log.msg("archive %s successful: version = %s %d pending" % (
             key,
-            result["version_identifier"],), 
+            result["version_identifier"],
+            _pending_archive_count, ), 
             logLevel=logging.INFO)
 
+    if _pending_archive_count == 0:
+        _archive_complete_deferred.callback(None)
+
 def _archive_error(failure, key):
+    global _pending_archive_count
+    _pending_archive_count -= 1
+
     log.msg("key %s Failure %s" % (key, failure.getErrorMessage(), ), 
+        logLevel=logging.ERROR)
+
+    if _pending_archive_count == 0:
+        _archive_complete_deferred.callback(None)
+
+def _archive_complete(result, keys):
+    log.msg("all archives complete. %d keys for further testing" % (len(keys),),
+            logLevel=logging.INFO)
+    # now we can start the next phase of the test
+    reactor.stop()
+
+def _archive_failure(failure,):
+    log.msg("archives failed: Failure %s" % (failure.getErrorMessage(), ), 
         logLevel=logging.ERROR)
     if reactor.running:
         reactor.stop()
 
-def _feed_random_producer(args,  producers, archive_complete_deferred):
-    if archive_complete_deferred.called:
+def _feed_random_producer(args,  producers):
+    if _archive_complete_deferred.called:
         log.msg("_feed_random_producer: archive_complete_deferred called", 
                 logLevel=logging.WARN)
         return
@@ -111,9 +136,6 @@ def _feed_random_producer(args,  producers, archive_complete_deferred):
     if len(producers) == 0:
         log.msg("_feed_random_producers: no active producers; exiting", 
                 logLevel=logging.DEBUG)
-        # now we can start the next phase of the test
-        archive_complete_deferred.callback(None)
-        reactor.stop()   
         return     
 
     producer = random.choice(producers)
@@ -126,19 +148,16 @@ def _feed_random_producer(args,  producers, archive_complete_deferred):
 
     # call ourselves again after a random interval
     feed_delay = random.uniform(args.min_feed_delay, args.max_feed_delay)
-    reactor.callLater(feed_delay, 
-                      _feed_random_producer, 
-                      args, 
-                      producers, 
-                      archive_complete_deferred)
+    reactor.callLater(feed_delay, _feed_random_producer, args, producers)
 
 def _start_archives(args, identity, collection_name):
+    global _pending_archive_count
+
     log.msg("starting user_name = %s collection = %s" % (identity.user_name, 
                                                          collection_name), 
             logLevel=logging.DEBUG)
 
     # start all the keys archiving
-    archive_complete_deferred = defer.Deferred()
     keys = list()
     producers = list()
     for i in range(args.number_of_keys):
@@ -152,13 +171,13 @@ def _start_archives(args, identity, collection_name):
         deferred = archive(identity, collection_name, key, bodyProducer)
         deferred.addCallback(_archive_result, key)
         deferred.addErrback(_archive_error, key)
+        _pending_archive_count += 1
+
+    _archive_complete_deferred.addCallback(_archive_complete, keys)
+    _archive_complete_deferred.addErrback(_archive_failure)
 
     feed_delay = random.uniform(args.min_feed_delay, args.max_feed_delay)
-    reactor.callLater(feed_delay, 
-                      _feed_random_producer, 
-                      args, 
-                      producers, 
-                      archive_complete_deferred)
+    reactor.callLater(feed_delay, _feed_random_producer, args, producers)
 
 if __name__ == "__main__":
     _initialize_logging()
