@@ -8,7 +8,6 @@ import argparse
 import logging
 import random
 from string import printable
-from StringIO import StringIO
 import sys
 
 from twisted.python import log
@@ -17,8 +16,11 @@ from twisted.internet import reactor, defer
 import motoboto
 from motoboto.identity import load_identity_from_file
 
-from twisted_client_for_nimbusio.archiver import archive
+from twisted_client_for_nimbusio.rest_api import compute_archive_path
+from twisted_client_for_nimbusio.requester import start_collection_request
 from twisted_client_for_nimbusio.pass_thru_producer import PassThruProducer
+from twisted_client_for_nimbusio.json_response_protocol import \
+    JSONResponseProtocol
 
 class SetupError(Exception):
     pass
@@ -114,7 +116,7 @@ def _archive_error(failure, key):
     if _pending_archive_count == 0:
         _archive_complete_deferred.callback(None)
 
-def _archive_complete(result, keys):
+def _archive_complete(_result, keys):
     log.msg("all archives complete. %d keys for further testing" % (len(keys),),
             logLevel=logging.INFO)
     # now we can start the next phase of the test
@@ -165,12 +167,22 @@ def _start_archives(args, identity, collection_name):
         key = "".join([prefix, _separator, "key_%05d" % (i+1, )])
         log.msg("starting archive for %r" % (key, ), logLevel=logging.DEBUG)
         keys.append(key)
+
+        path = compute_archive_path(key)
+
         length = random.randint(args.min_file_size, args.max_file_size)
-        bodyProducer = PassThruProducer(key, length)
-        producers.append(bodyProducer)
-        deferred = archive(identity, collection_name, key, bodyProducer)
+        producer = PassThruProducer(key, length)
+        producers.append(producer)
+
+        deferred = start_collection_request(identity,
+                                            "POST", 
+                                            collection_name,
+                                            path, 
+                                            JSONResponseProtocol, 
+                                            body_producer=producer)
         deferred.addCallback(_archive_result, key)
         deferred.addErrback(_archive_error, key)
+
         _pending_archive_count += 1
 
     _archive_complete_deferred.addCallback(_archive_complete, keys)
