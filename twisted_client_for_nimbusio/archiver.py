@@ -64,18 +64,18 @@ def _compute_headers(identity, method, path):
 
     return headers
 
-def _push_response(response, final_deferred):
+def _post_response(response, final_deferred):
     if response.code != httplib.OK:            
-        error_message = "Invalid HTTP Status: (%s) %s" % (respose.code, 
+        error_message = "Invalid HTTP Status: (%s) %s" % (response.code, 
                                                           response.phrase)
-        log.msg("_push_response %s" % (error_message, ), 
+        log.msg("_post_response %s" % (error_message, ), 
                 logLevel=logging.ERROR)
         final_deferred.errback(error_message)
     else:
         response.deliverBody(ReceiveResponseProtocol(final_deferred))
 
-def _push_error(failure, final_deferred):
-    log.msg("_push_error %s" % (failure.getErrorMessage(), ), 
+def _post_error(failure, final_deferred):
+    log.msg("_post_error %s" % (failure.getErrorMessage(), ), 
             logLevel=logging.ERROR)
     final_deferred.errback(failure)
 
@@ -93,7 +93,7 @@ def archive(identity, collection_name, key, bodyProducer):
     log.msg("requesting '%r" % (uri, ), logLevel=logging.DEBUG)
     request_deferred = agent.request(method, uri, headers, bodyProducer)
 
-    request_deferred.addCallback(_push_response, final_deferred)
-    request_deferred.addErrback(_push_error, final_deferred)
+    request_deferred.addCallback(_post_response, final_deferred)
+    request_deferred.addErrback(_post_error, final_deferred)
 
     return final_deferred
