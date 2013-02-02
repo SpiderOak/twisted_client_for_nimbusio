@@ -55,8 +55,11 @@ def _request_callback(response, response_protocol, final_deferred):
         log.msg("_request_callback %s" % (error_message, ), 
                 logLevel=logging.ERROR)
         final_deferred.errback(error_message)
-    else:
+    elif response_protocol is not None:
         response.deliverBody(response_protocol(final_deferred))
+    else:
+        headers = dict(response.headers.getAllRawHeaders())
+        final_deferred.callback(headers)
 
 def _request_errback(failure, final_deferred):
     log.msg("_request_errback %s" % (failure.getErrorMessage(), ), 
@@ -67,7 +70,7 @@ def start_request(identity,
                   method, 
                   hostname, 
                   path, 
-                  response_protocol, 
+                  response_protocol=None, 
                   body_producer=None,
                   additional_headers=None):
     """
@@ -82,7 +85,7 @@ def start_request(identity,
             headers.addRawHeader(key, value)
 
     agent = Agent(reactor)
-    log.msg("requesting '%r" % (uri, ), logLevel=logging.DEBUG)
+    log.msg("requesting %s '%r" % (method, uri, ), logLevel=logging.DEBUG)
     request_deferred = agent.request(method, uri, headers, body_producer)
 
     request_deferred.addCallback(_request_callback, 
@@ -96,7 +99,7 @@ def start_collection_request(identity,
                              method, 
                              collection_name, 
                              path, 
-                             response_protocol, 
+                             response_protocol=None, 
                              body_producer=None,
                              additional_headers=None):
     """

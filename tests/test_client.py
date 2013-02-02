@@ -16,7 +16,8 @@ from twisted.internet import reactor, defer
 import motoboto
 from motoboto.identity import load_identity_from_file
 
-from twisted_client_for_nimbusio.rest_api import compute_archive_path
+from twisted_client_for_nimbusio.rest_api import compute_archive_path, \
+    compute_head_path
 from twisted_client_for_nimbusio.requester import start_collection_request
 from twisted_client_for_nimbusio.pass_thru_producer import PassThruProducer
 from twisted_client_for_nimbusio.json_response_protocol import \
@@ -30,6 +31,8 @@ _prefixes = ["prefix_1", "prefix_2", "prefix_4", ]
 _separator = "/"
 _archive_complete_deferred = defer.Deferred()
 _pending_archive_count = 0
+_head_test_complete_deferred = defer.Deferred()
+_pending_head_test_count = 0
 
 def _initialize_logging():
     """initialize the log"""
@@ -93,6 +96,66 @@ def _setup_test(args):
 def _data_string(length):
     return "".join([random.choice(printable) for _ in range(length)])
 
+def _head_result(result, key):
+    global _pending_head_test_count
+    _pending_head_test_count -= 1
+
+    log.msg("HEAD %s successful: Last-Mondified=%s, Content-Length=%s " % (
+            key,
+            result["Last-Modified"][0],
+            result["Content-Length"][0], ), 
+            logLevel=logging.INFO)
+
+    if _pending_head_test_count == 0:
+        _head_test_complete_deferred.callback(None)
+
+def _head_error(failure, key):
+    global _pending_head_test_count
+    _pending_head_test_count -= 1
+
+    log.msg("HEAD key %s Failure %s" % (key, failure.getErrorMessage(), ), 
+        logLevel=logging.ERROR)
+
+    if _pending_head_test_count == 0:
+        _head_test_complete_deferred.callback(None)
+
+def _head_test_complete(_result, args, identity, collection_name, keys):
+    log.msg("all HEADs complete. %d keys for further testing" % (len(keys),),
+            logLevel=logging.INFO)
+
+    # now we can start the next phase of the test
+    reactor.stop() 
+
+def _head_test_failure(failure):
+    log.msg("HEAD test failed: Failure %s" % (failure.getErrorMessage(), ), 
+        logLevel=logging.ERROR)
+    if reactor.running:
+        reactor.stop()
+
+def _start_head_tests(args, identity, collection_name, keys):
+    global _pending_head_test_count
+
+    for key in keys:
+        log.msg("starting HEAD for %r" % (key, ), logLevel=logging.DEBUG)
+
+        path = compute_head_path(key)
+
+        deferred = start_collection_request(identity,
+                                            "HEAD", 
+                                            collection_name,
+                                            path)
+        deferred.addCallback(_head_result, key)
+        deferred.addErrback(_head_error, key)
+
+        _pending_head_test_count += 1
+
+    _head_test_complete_deferred.addCallback(_head_test_complete, 
+                                             args,
+                                             identity,
+                                             collection_name, 
+                                             keys)
+    _head_test_complete_deferred.addErrback(_head_test_failure)
+
 def _archive_result(result, key):
     global _pending_archive_count
     _pending_archive_count -= 1
@@ -116,13 +179,19 @@ def _archive_error(failure, key):
     if _pending_archive_count == 0:
         _archive_complete_deferred.callback(None)
 
-def _archive_complete(_result, keys):
+def _archive_complete(_result, args, identity, collection_name, keys):
     log.msg("all archives complete. %d keys for further testing" % (len(keys),),
             logLevel=logging.INFO)
-    # now we can start the next phase of the test
-    reactor.stop()
 
-def _archive_failure(failure,):
+    # now we can start the next phase of the test
+    reactor.callLater(0,
+                      _start_head_tests, 
+                      args, 
+                      identity, 
+                      collection_name, 
+                      keys)
+
+def _archive_failure(failure):
     log.msg("archives failed: Failure %s" % (failure.getErrorMessage(), ), 
         logLevel=logging.ERROR)
     if reactor.running:
@@ -185,7 +254,11 @@ def _start_archives(args, identity, collection_name):
 
         _pending_archive_count += 1
 
-    _archive_complete_deferred.addCallback(_archive_complete, keys)
+    _archive_complete_deferred.addCallback(_archive_complete, 
+                                           args,
+                                           identity,
+                                           collection_name, 
+                                           keys)
     _archive_complete_deferred.addErrback(_archive_failure)
 
     feed_delay = random.uniform(args.min_feed_delay, args.max_feed_delay)

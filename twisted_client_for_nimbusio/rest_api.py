@@ -12,7 +12,7 @@ def compute_archive_path(key, *args, **kwargs):
     """
     return compute_uri_path("data", key, *args, **kwargs)
 
- def compute_head_path(key, *args, **kwargs):
+def compute_head_path(key, *args, **kwargs):
     """
     compute a path to HEAD the key
     """
