@@ -30,6 +30,8 @@ from test_archive import archive_complete_deferred, start_archives
 from test_head import head_test_complete_deferred, start_head_tests
 from test_list_keys import list_keys_test_complete_deferred, \
     start_list_keys_tests
+from test_list_versions import list_versions_test_complete_deferred, \
+    start_list_versions_tests
 
 class SetupError(Exception):
     pass
@@ -65,6 +67,27 @@ def _setup_test(args):
 
     return identity, bucket.name
 
+def _list_versions_test_complete(_result, state):
+    """
+    callback for successful completion of all list_versions tests
+    """
+    log.msg("all list_versions complete. %d keys for further testing" % (
+            len(state["key-data"]) ,),
+            logLevel=logging.INFO)
+
+    # now we can start the next phase of the test
+    reactor.stop() 
+
+def _list_versions_test_failure(failure, _state):
+    """
+    errback for failure of the overall list_versions test
+    """
+    log.msg("list_versions test failed: Failure %s" % (
+            failure.getErrorMessage(), ), 
+            logLevel=logging.ERROR)
+    if reactor.running:
+        reactor.stop()
+
 def _list_keys_test_complete(_result, state):
     """
     callback for successful completion of all list_keys tests
@@ -74,7 +97,7 @@ def _list_keys_test_complete(_result, state):
             logLevel=logging.INFO)
 
     # now we can start the next phase of the test
-    reactor.stop() 
+    reactor.callLater(0, start_list_versions_tests, state)
 
 def _list_keys_test_failure(failure, _state):
     """
@@ -149,6 +172,10 @@ if __name__ == "__main__":
     list_keys_test_complete_deferred.addCallback(_list_keys_test_complete, 
                                                  state) 
     list_keys_test_complete_deferred.addErrback(_list_keys_test_failure, state)
+    list_versions_test_complete_deferred.addCallback(_list_versions_test_complete, 
+                                                     state) 
+    list_versions_test_complete_deferred.addErrback(_list_versions_test_failure, 
+                                                    state)
 
     reactor.callLater(0, start_archives, state)
 

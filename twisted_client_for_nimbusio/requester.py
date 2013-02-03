@@ -76,6 +76,29 @@ def start_request(identity,
     """
     start an HTTP(S) request
     return a deferred that fires with the response
+
+    identity
+        nimbus.io identity object
+
+    method
+        HTTP method (GET, POST, etc)
+
+    hostname
+        nimbus.io hostname. Usually computed by lumberyard function 
+        compute_collection_hostname
+
+    path
+        the path prt of a URI. Usually computed by a function from
+        twisted_client_for_nimbusio.rest_api
+
+    response_protocol
+        An IProtocol for receving the response from the server
+
+    body_producer
+        An IBodyProducer to produce data to upload to the nimbus.io server
+
+    additional_headers
+        A dict of key, value pairs to be added to the request headers
     """
     final_deferred = defer.Deferred()
     uri = _compute_uri(hostname, path)

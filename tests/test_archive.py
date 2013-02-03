@@ -41,6 +41,8 @@ def _archive_result(result, state, key):
             _pending_archive_count, ), 
             logLevel=logging.INFO)
 
+    state["key-data"][key]["version-identifier"] = result["version_identifier"]
+
     if _pending_archive_count == 0:
         archive_complete_deferred.callback(None)
 
