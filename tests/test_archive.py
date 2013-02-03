@@ -21,8 +21,6 @@ from twisted_client_for_nimbusio.json_response_protocol import \
 
 archive_complete_deferred = defer.Deferred()
 _pending_archive_count = 0
-_prefixes = ["prefix_1", "prefix_2", "prefix_4", ]
-_separator = "/"
 
 def _data_string(length):
     """
@@ -102,8 +100,8 @@ def start_archives(state):
 
     # start all the keys archiving
     for i in range(state["args"].number_of_keys):
-        prefix = random.choice(_prefixes)
-        key = "".join([prefix, _separator, "key_%05d" % (i+1, )])
+        prefix = random.choice(state["prefixes"])
+        key = "".join([prefix, state["separator"], "key_%05d" % (i+1, )])
         log.msg("starting archive for %r" % (key, ), logLevel=logging.DEBUG)
 
         path = compute_archive_path(key)

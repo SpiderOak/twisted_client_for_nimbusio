@@ -13,7 +13,7 @@ sudo python2.7 setup.py install
 To run against the source run:
 sudo rm -rf rm /opt/so2.7/lib/python2.7/site-packages/twisted_client_for_nimbusio-0.1.0-py2.7.egg
 cd "${HOME}/twisted_client_for_nimbusio"
-(export PYTHONPATH="${HOME}/twisted_client_for_nimbusio";tests/run_test.sh \
+(tests/run_test.sh \
      --identity-file=/home/dougfort/motoboto_client/motoboto_test_user_id )
 """
 import logging
@@ -28,12 +28,16 @@ from motoboto.identity import load_identity_from_file
 from commandline import parse_commandline
 from test_archive import archive_complete_deferred, start_archives
 from test_head import head_test_complete_deferred, start_head_tests
+from test_list_keys import list_keys_test_complete_deferred, \
+    start_list_keys_tests
 
 class SetupError(Exception):
     pass
 
 def _create_state(args, identity, collection_name):
-    return {"args"              : args,
+    return {"prefixes"          :  ["prefix_1", "prefix_2", "prefix_4", ],
+            "separator"         : "/",
+            "args"              : args,
             "identity"          : identity,
             "collection-name"   : collection_name,
             "key-data"          : dict()}
@@ -61,6 +65,25 @@ def _setup_test(args):
 
     return identity, bucket.name
 
+def _list_keys_test_complete(_result, state):
+    """
+    callback for successful completion of all list_keys tests
+    """
+    log.msg("all list_keys complete. %d keys for further testing" % (
+            len(state["key-data"]) ,),
+            logLevel=logging.INFO)
+
+    # now we can start the next phase of the test
+    reactor.stop() 
+
+def _list_keys_test_failure(failure, _state):
+    """
+    errback for failure of the overall list_keys test
+    """
+    log.msg("list_keys test failed: Failure %s" % (failure.getErrorMessage(), ), 
+        logLevel=logging.ERROR)
+    if reactor.running:
+        reactor.stop()
 
 def _head_test_complete(_result, state):
     """
@@ -71,7 +94,7 @@ def _head_test_complete(_result, state):
             logLevel=logging.INFO)
 
     # now we can start the next phase of the test
-    reactor.stop() 
+    reactor.callLater(0, start_list_keys_tests, state)
 
 def _head_test_failure(failure, _state):
     """
@@ -123,6 +146,9 @@ if __name__ == "__main__":
     archive_complete_deferred.addErrback(_archive_failure, state)
     head_test_complete_deferred.addCallback(_head_test_complete, state) 
     head_test_complete_deferred.addErrback(_head_test_failure, state)
+    list_keys_test_complete_deferred.addCallback(_list_keys_test_complete, 
+                                                 state) 
+    list_keys_test_complete_deferred.addErrback(_list_keys_test_failure, state)
 
     reactor.callLater(0, start_archives, state)
 

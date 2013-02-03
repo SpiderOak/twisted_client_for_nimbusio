@@ -18,3 +18,23 @@ def compute_head_path(key, *args, **kwargs):
     """
     return compute_uri_path("data", key, *args, **kwargs)
  
+def compute_list_keys_path(prefix=""):
+    """
+    list all keys, or all keys beginning with prefix
+    """ 
+    kwargs = dict()
+    if prefix != "" and prefix is not None:
+        kwargs["prefix"] = prefix
+
+    return compute_uri_path("data/", **kwargs)
+
+def compute_list_versions_path(prefix=""):
+    """
+    list all versions of all keys, 
+    or all versions of all keys beginning with prefix
+    """ 
+    kwargs = dict()
+    if prefix != "" and prefix is not None:
+        kwargs["prefix"] = prefix
+
+    return compute_uri_path("/?versions", **kwargs)
