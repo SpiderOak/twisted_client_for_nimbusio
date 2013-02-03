@@ -38,3 +38,11 @@ def compute_list_versions_path(prefix=""):
         kwargs["prefix"] = prefix
 
     return compute_uri_path("/?versions", **kwargs)
+
+def compute_retrieve_path(key, version_id=None):
+    """
+    retrieve the contents of a key
+    """
+    kwargs = {"version_identifier"    : version_id}
+
+    return compute_uri_path("data", key, **kwargs)
