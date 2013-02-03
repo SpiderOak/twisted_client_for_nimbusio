@@ -4,6 +4,7 @@ test_list_versions.py
 
 test listing versions, with and without specifying a key prefix
 """
+import json
 import logging
 
 from twisted.python import log
@@ -12,20 +13,22 @@ from twisted.internet import defer
 from twisted_client_for_nimbusio.rest_api import compute_list_versions_path
 
 from twisted_client_for_nimbusio.requester import start_collection_request
-from twisted_client_for_nimbusio.json_response_protocol import \
-    JSONResponseProtocol
+from twisted_client_for_nimbusio.bufferred_response_protocol import \
+    BufferredResponseProtocol
 
 list_versions_test_complete_deferred = defer.Deferred()
 _pending_list_versions_test_count = 0
 _error_count = 0
 _failure_count = 0
 
-def _list_versions_result(result, state, prefix):
+def _list_versions_result(result_buffer, state, prefix):
     """
     callback for successful result of an individual list versions request
     """
     global _pending_list_versions_test_count, _error_count
     _pending_list_versions_test_count -= 1
+
+    result = json.loads(result_buffer)
 
     expected_versions = set([state["key-data"][key]["version-identifier"] \
                             for key in state["key-data"].keys() \
@@ -81,7 +84,7 @@ def start_list_versions_tests(state):
                                             "GET", 
                                             state["collection-name"],
                                             path,
-                                            JSONResponseProtocol)
+                                            BufferredResponseProtocol)
         deferred.addCallback(_list_versions_result, state, prefix)
         deferred.addErrback(_list_versions_error, state, prefix)
 

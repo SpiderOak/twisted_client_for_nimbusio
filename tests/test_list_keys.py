@@ -4,6 +4,7 @@ test_list_keys.py
 
 test listing keys, with and without specifying a prefix
 """
+import json
 import logging
 
 from twisted.python import log
@@ -12,20 +13,22 @@ from twisted.internet import defer
 from twisted_client_for_nimbusio.rest_api import compute_list_keys_path
 
 from twisted_client_for_nimbusio.requester import start_collection_request
-from twisted_client_for_nimbusio.json_response_protocol import \
-    JSONResponseProtocol
+from twisted_client_for_nimbusio.bufferred_response_protocol import \
+    BufferredResponseProtocol
 
 list_keys_test_complete_deferred = defer.Deferred()
 _pending_list_keys_test_count = 0
 _error_count = 0
 _failure_count = 0
 
-def _list_keys_result(result, state, prefix):
+def _list_keys_result(result_buffer, state, prefix):
     """
     callback for successful result of an individual list keys request
     """
     global _pending_list_keys_test_count, _error_count
     _pending_list_keys_test_count -= 1
+
+    result = json.loads(result_buffer)
 
     expected_keys = set([key for key in state["key-data"].keys() \
                          if key.startswith(prefix)])
@@ -79,7 +82,7 @@ def start_list_keys_tests(state):
                                             "GET", 
                                             state["collection-name"],
                                             path,
-                                            JSONResponseProtocol)
+                                            BufferredResponseProtocol)
         deferred.addCallback(_list_keys_result, state, prefix)
         deferred.addErrback(_list_keys_error, state, prefix)
 

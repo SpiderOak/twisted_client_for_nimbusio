@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-json_response_protocol.py
+buffered_response_protocol.py
 
-A response protocol that fires a deferred with a python object loaded from JSON
+A response protocol that stores received data in a buffer
+and fires a deferred with the entire content when it is complete.
 """
-import json 
 import logging
 
 from twisted.python import log
@@ -13,7 +13,11 @@ from twisted.internet.protocol import Protocol
 
 from twisted.web.client import ResponseDone
 
-class JSONResponseProtocol(Protocol):
+class BufferredResponseProtocol(Protocol):
+    """
+    A response protocol that stores received data in a buffer
+    and fires a deferred with the entire content when it is complete.
+    """
     def __init__(self, deferred):
         self._deferred = deferred
         self._buffer = ""
@@ -23,12 +27,6 @@ class JSONResponseProtocol(Protocol):
 
     def connectionLost(self, reason=ResponseDone):
         if reason.check(ResponseDone):
-            try:
-                result = json.loads(self._buffer)
-            except Exception, instance:
-                log.err(instance, logLevel=logging.ERROR)
-                self._deferred.errback(instance)
-            else:
-                self._deferred.callback(result)
+            self._deferred.callback(self._buffer)
         else:
             self._deferred.errback(reason)

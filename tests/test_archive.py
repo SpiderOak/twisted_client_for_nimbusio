@@ -5,6 +5,7 @@ test_archive.py
 test archiving files
 """
 from hashlib import md5
+import json
 import logging
 import random
 from string import printable
@@ -16,8 +17,8 @@ from twisted_client_for_nimbusio.rest_api import compute_archive_path
 
 from twisted_client_for_nimbusio.requester import start_collection_request
 from twisted_client_for_nimbusio.pass_thru_producer import PassThruProducer
-from twisted_client_for_nimbusio.json_response_protocol import \
-    JSONResponseProtocol
+from twisted_client_for_nimbusio.bufferred_response_protocol import \
+    BufferredResponseProtocol
 
 archive_complete_deferred = defer.Deferred()
 _pending_archive_count = 0
@@ -30,12 +31,14 @@ def _data_string(length):
     """
     return "".join([random.choice(printable) for _ in range(length)])
 
-def _archive_result(result, state, key):
+def _archive_result(result_buffer, state, key):
     """
     callback for successful completion of an individual archive
     """
     global _pending_archive_count
-    _pending_archive_count -= 1
+    _pending_archive_count -= 1  
+
+    result = json.loads(result_buffer)  
 
     log.msg("archive %s successful: version = %s %d pending" % (
             key,
@@ -124,7 +127,7 @@ def start_archives(state):
                                             "POST", 
                                             state["collection-name"],
                                             path, 
-                                            JSONResponseProtocol, 
+                                            BufferredResponseProtocol, 
                                             body_producer=producer)
         deferred.addCallback(_archive_result, state, key)
         deferred.addErrback(_archive_error, state, key)
