@@ -36,6 +36,9 @@ from test_list_versions import list_versions_test_complete_deferred, \
 class SetupError(Exception):
     pass
 
+_total_errors = 0
+_total_failures = 0
+
 def _create_state(args, identity, collection_name):
     return {"prefixes"          :  ["prefix_1", "prefix_2", "prefix_4", ],
             "separator"         : "/",
@@ -67,34 +70,50 @@ def _setup_test(args):
 
     return identity, bucket.name
 
-def _list_versions_test_complete(_result, state):
+def _list_versions_test_complete(result, state):
     """
     callback for successful completion of all list_versions tests
     """
-    log.msg("all list_versions complete. %d keys for further testing" % (
-            len(state["key-data"]) ,),
+    global _total_errors, _total_failures
+
+    error_count, failure_count = result
+    log.msg("all list_versions complete. %d errors %d failures" % (
+            error_count, failure_count,),
             logLevel=logging.INFO)
 
+    _total_errors += error_count
+    _total_failures += failure_count
+
     # now we can start the next phase of the test
+    log.msg("all tests complete %d errors %d failures" % (_total_errors, 
+                                                           _total_failures))
     reactor.stop() 
 
 def _list_versions_test_failure(failure, _state):
     """
     errback for failure of the overall list_versions test
     """
+    global _total_failures
+
     log.msg("list_versions test failed: Failure %s" % (
             failure.getErrorMessage(), ), 
             logLevel=logging.ERROR)
-    if reactor.running:
-        reactor.stop()
 
-def _list_keys_test_complete(_result, state):
+    _total_failures += 1
+
+def _list_keys_test_complete(result, state):
     """
     callback for successful completion of all list_keys tests
     """
-    log.msg("all list_keys complete. %d keys for further testing" % (
-            len(state["key-data"]) ,),
+    global _total_errors, _total_failures
+
+    error_count, failure_count = result
+    log.msg("all list_keys complete. %d errors %d failures" % (
+            error_count, failure_count,),
             logLevel=logging.INFO)
+
+    _total_errors += error_count
+    _total_failures += failure_count
 
     # now we can start the next phase of the test
     reactor.callLater(0, start_list_versions_tests, state)
@@ -103,18 +122,26 @@ def _list_keys_test_failure(failure, _state):
     """
     errback for failure of the overall list_keys test
     """
+    global _total_failures
+
     log.msg("list_keys test failed: Failure %s" % (failure.getErrorMessage(), ), 
         logLevel=logging.ERROR)
-    if reactor.running:
-        reactor.stop()
 
-def _head_test_complete(_result, state):
+    _total_failures += 1
+
+def _head_test_complete(result, state):
     """
     callback for successful completion of all HEAD tests
     """
-    log.msg("all HEADs complete. %d keys for further testing" % (
-            len(state["key-data"]) ,),
+    global _total_errors, _total_failures
+
+    error_count, failure_count = result
+    log.msg("all HEADs complete. %d errors, %d failures" % (
+            error_count, failure_count, ),
             logLevel=logging.INFO)
+
+    _total_errors += error_count
+    _total_failures += failure_count
 
     # now we can start the next phase of the test
     reactor.callLater(0, start_list_keys_tests, state)
@@ -123,18 +150,26 @@ def _head_test_failure(failure, _state):
     """
     errback for failure of the overall HEAD test
     """
+    global _total_failures
+
     log.msg("HEAD test failed: Failure %s" % (failure.getErrorMessage(), ), 
         logLevel=logging.ERROR)
-    if reactor.running:
-        reactor.stop()
 
-def _archive_complete(_result, state):
+    _total_failures += 1
+
+def _archive_complete(result, state):
     """
     callback for completion of all archives 
     """
-    log.msg("all archives complete. %d keys for further testing" % (
-            len(state["key-data"]),),
+    global _total_errors, _total_failures
+
+    error_count, failure_count = result
+    log.msg("all archives complete. %d errors, %d failures" % (
+            error_count, failure_count, ),
             logLevel=logging.INFO)
+
+    _total_errors += error_count
+    _total_failures += failure_count
 
     # now we can start the next phase of the test
     reactor.callLater(0, start_head_tests, state)
@@ -142,12 +177,13 @@ def _archive_complete(_result, state):
 def _archive_failure(failure):
     """
     errback for failure of archives
-    one archive failure is enough to abort the test
     """
+    global _total_failures
+
     log.msg("archives failed: Failure %s" % (failure.getErrorMessage(), ), 
         logLevel=logging.ERROR)
-    if reactor.running:
-        reactor.stop()
+
+    _total_failures += 1
 
 if __name__ == "__main__":
     _initialize_logging()

@@ -17,12 +17,14 @@ from twisted_client_for_nimbusio.json_response_protocol import \
 
 list_versions_test_complete_deferred = defer.Deferred()
 _pending_list_versions_test_count = 0
+_error_count = 0
+_failure_count = 0
 
 def _list_versions_result(result, state, prefix):
     """
     callback for successful result of an individual list versions request
     """
-    global _pending_list_versions_test_count
+    global _pending_list_versions_test_count, _error_count
     _pending_list_versions_test_count -= 1
 
     expected_versions = set([state["key-data"][key]["version-identifier"] \
@@ -39,22 +41,27 @@ def _list_versions_result(result, state, prefix):
         log.err("list_versions %s error %s != %s" % (prefix,
                                                      actual_versions, 
                                                      expected_versions))
+        _error_count += 1
 
     if _pending_list_versions_test_count == 0:
-        list_versions_test_complete_deferred.callback(None)
+        list_versions_test_complete_deferred.callback((_error_count, 
+                                                       _failure_count, ))
 
 def _list_versions_error(failure, state, prefix):
     """
     errback for failure of an individual list_versions request
     """
-    global _pending_list_versions_test_count
+    global _pending_list_versions_test_count, _failure_count
     _pending_list_versions_test_count -= 1
 
     log.msg("list_versions %s Failure %s" % (prefix, failure.getErrorMessage(), ), 
         logLevel=logging.ERROR)
 
+    _failure_count += 1
+
     if _pending_list_versions_test_count == 0:
-        list_versions_test_complete_deferred.callback(None)
+        list_versions_test_complete_deferred.callback((_error_count, 
+                                                      _failure_count, ))
 
 def start_list_versions_tests(state):
     """

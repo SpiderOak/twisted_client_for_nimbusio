@@ -21,6 +21,8 @@ from twisted_client_for_nimbusio.json_response_protocol import \
 
 archive_complete_deferred = defer.Deferred()
 _pending_archive_count = 0
+_error_count = 0
+_failure_count = 0
 
 def _data_string(length):
     """
@@ -44,20 +46,21 @@ def _archive_result(result, state, key):
     state["key-data"][key]["version-identifier"] = result["version_identifier"]
 
     if _pending_archive_count == 0:
-        archive_complete_deferred.callback(None)
+        archive_complete_deferred.callback((_error_count, _failure_count, ))
 
 def _archive_error(failure, state, key):
     """
     errback for failure of an individual archive
     """
-    global _pending_archive_count
+    global _failure_count,  _pending_archive_count
+    _failure_count += 1
     _pending_archive_count -= 1
 
     log.msg("key %s Failure %s" % (key, failure.getErrorMessage(), ), 
         logLevel=logging.ERROR)
 
     if _pending_archive_count == 0:
-        archive_complete_deferred.callback(None)
+        archive_complete_deferred.callback((_error_count, _failure_count, ))
 
 def _feed_random_producer(state):
     """

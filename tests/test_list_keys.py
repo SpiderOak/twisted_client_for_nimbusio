@@ -17,12 +17,14 @@ from twisted_client_for_nimbusio.json_response_protocol import \
 
 list_keys_test_complete_deferred = defer.Deferred()
 _pending_list_keys_test_count = 0
+_error_count = 0
+_failure_count = 0
 
 def _list_keys_result(result, state, prefix):
     """
     callback for successful result of an individual list keys request
     """
-    global _pending_list_keys_test_count
+    global _pending_list_keys_test_count, _error_count
     _pending_list_keys_test_count -= 1
 
     expected_keys = set([key for key in state["key-data"].keys() \
@@ -32,25 +34,32 @@ def _list_keys_result(result, state, prefix):
     for key_entry in result["key_data"]:
         actual_keys.add(key_entry["key"])
 
-    assert actual_keys == expected_keys
-
-    log.msg("list_keys successful: %s " % (prefix, ))
+    if actual_keys == expected_keys:
+        log.msg("list_keys successful: %s " % (prefix, ))
+    else:
+        log.err("list_keys mismatch %s != %s" % (actual_keys, expected_keys, ),
+                logLevel=logging.ERROR)
+        _error_count += 1
 
     if _pending_list_keys_test_count == 0:
-        list_keys_test_complete_deferred.callback(None)
+        list_keys_test_complete_deferred.callback((_error_count, 
+                                                   _failure_count))
 
 def _list_keys_error(failure, state, prefix):
     """
     errback for failure of an individual list_keys request
     """
-    global _pending_list_keys_test_count
+    global _pending_list_keys_test_count, _failure_count
     _pending_list_keys_test_count -= 1
 
     log.msg("list_keys %s Failure %s" % (prefix, failure.getErrorMessage(), ), 
         logLevel=logging.ERROR)
 
+    _failure_count += 1
+
     if _pending_list_keys_test_count == 0:
-        list_keys_test_complete_deferred.callback(None)
+        list_keys_test_complete_deferred.callback((_error_count, 
+                                                   _failure_count))
 
 def start_list_keys_tests(state):
     """
