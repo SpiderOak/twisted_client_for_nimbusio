@@ -46,3 +46,16 @@ def compute_retrieve_path(key, version_id=None):
     kwargs = {"version_identifier"    : version_id}
 
     return compute_uri_path("data", key, **kwargs)
+
+def compute_range_header_tuple(slice_offset, slice_size):
+    """
+    return a (key, value) tuple used to add a 'Range:' header 
+    to retrieve the specified slice
+    """
+    if slice_size is not None:
+        if slice_offset is None:
+            slice_offset = 0
+        return "Range", "bytes=%d-%d" % (slice_offset, 
+                                          slice_offset + slice_size - 1, )
+    assert slice_offset is not None
+    return "Range", "bytes=%d-" % (slice_offset, )
