@@ -33,6 +33,8 @@ from test_list_keys import list_keys_test_complete_deferred, \
 from test_list_versions import list_versions_test_complete_deferred, \
     start_list_versions_tests
 from test_retrieve import retrieve_test_complete_deferred, start_retrieve_tests
+from test_retrieve_slice import retrieve_slice_test_complete_deferred, \
+    start_retrieve_slice_tests
 
 class SetupError(Exception):
     pass
@@ -46,7 +48,8 @@ def _create_state(args, identity, collection_name):
             "args"              : args,
             "identity"          : identity,
             "collection-name"   : collection_name,
-            "key-data"          : dict()}
+            "key-data"          : dict(),
+            "slice-data"        : dict()}
 
 def _initialize_logging():
     """initialize the log"""
@@ -71,6 +74,40 @@ def _setup_test(args):
 
     return identity, bucket.name
 
+def _retrieve_slice_test_complete(result, state):
+    """
+    callback for successful completion of all retrieve slice tests
+    """
+    global _total_errors, _total_failures
+
+    error_count, failure_count = result
+    log.msg("all slice retrieves complete. %d errors %d failures" % (
+            error_count, failure_count,),
+            logLevel=logging.INFO)
+
+    _total_errors += error_count
+    _total_failures += failure_count
+
+    log.msg("all tests complete %d errors %d failures" % (_total_errors, 
+                                                           _total_failures))
+    reactor.stop() 
+
+def _retrieve_slice_test_failure(failure, _state):
+    """
+    errback for failure of the retrieve slice test
+    """
+    global _total_failures
+
+    log.msg("retrieve_slice test failed: Failure %s" % (
+            failure.getErrorMessage(), ), 
+            logLevel=logging.ERROR)
+
+    _total_failures += 1
+
+    log.msg("all tests complete %d errors %d failures" % (_total_errors, 
+                                                           _total_failures))
+    reactor.stop() 
+
 def _retrieve_test_complete(result, state):
     """
     callback for successful completion of all retrieve tests
@@ -85,9 +122,8 @@ def _retrieve_test_complete(result, state):
     _total_errors += error_count
     _total_failures += failure_count
 
-    log.msg("all tests complete %d errors %d failures" % (_total_errors, 
-                                                           _total_failures))
-    reactor.stop() 
+    # now we can start the next phase of the test
+    reactor.callLater(0, start_retrieve_slice_tests, state)
 
 def _retrieve_test_failure(failure, _state):
     """
@@ -101,9 +137,8 @@ def _retrieve_test_failure(failure, _state):
 
     _total_failures += 1
 
-    log.msg("all tests complete %d errors %d failures" % (_total_errors, 
-                                                           _total_failures))
-    reactor.stop() 
+    # now we can start the next phase of the test
+    reactor.callLater(0, start_retrieve_slice_tests, state)
 
 def _list_versions_test_complete(result, state):
     """
@@ -259,6 +294,10 @@ if __name__ == "__main__":
                                                     state)
     retrieve_test_complete_deferred.addCallback(_retrieve_test_complete, state) 
     retrieve_test_complete_deferred.addErrback(_retrieve_test_failure, state)
+    retrieve_slice_test_complete_deferred.addCallback(
+        _retrieve_slice_test_complete, state) 
+    retrieve_slice_test_complete_deferred.addErrback(
+        _retrieve_slice_test_failure, state)
 
     reactor.callLater(0, start_archives, state)
 

@@ -48,10 +48,16 @@ def _compute_headers(identity, method, path):
 
     return headers
 
-def _request_callback(response, response_protocol, final_deferred):
-    if response.code != httplib.OK:            
-        error_message = "Invalid HTTP Status: (%s) %s" % (response.code, 
-                                                          response.phrase)
+def _request_callback(response, 
+                      valid_http_status, 
+                      response_protocol, 
+                      final_deferred):
+
+    if not response.code in valid_http_status:            
+        error_message = "Invalid HTTP Status: (%s) %s expecting %s" % (
+                        response.code, 
+                        response.phrase,
+                        valid_http_status)
         log.msg("_request_callback %s" % (error_message, ), 
                 logLevel=logging.ERROR)
         final_deferred.errback(error_message)
@@ -72,7 +78,8 @@ def start_request(identity,
                   path, 
                   response_protocol=None, 
                   body_producer=None,
-                  additional_headers=None):
+                  additional_headers=None,
+                  valid_http_status=frozenset([httplib.OK, ])):
     """
     start an HTTP(S) request
     return a deferred that fires with the response
@@ -99,6 +106,10 @@ def start_request(identity,
 
     additional_headers
         A dict of key, value pairs to be added to the request headers
+
+    valid_http_status
+        A set of HTTP status code(s) that are valid for this request
+        defaults to 200 (OK) 
     """
     final_deferred = defer.Deferred()
     uri = _compute_uri(hostname, path)
@@ -112,7 +123,8 @@ def start_request(identity,
     request_deferred = agent.request(method, uri, headers, body_producer)
 
     request_deferred.addCallback(_request_callback, 
-                                 response_protocol, 
+                                 valid_http_status, 
+                                 response_protocol,
                                  final_deferred)
     request_deferred.addErrback(_request_errback, final_deferred)
 
@@ -124,7 +136,8 @@ def start_collection_request(identity,
                              path, 
                              response_protocol=None, 
                              body_producer=None,
-                             additional_headers=None):
+                             additional_headers=None,
+                             valid_http_status=frozenset([httplib.OK, ])):
     """
     start an HTTP(S) request for a specific collection
     return a deferred that fires with the response
@@ -136,5 +149,6 @@ def start_collection_request(identity,
                          path, 
                          response_protocol, 
                          body_producer,
-                         additional_headers)
+                         additional_headers,
+                         valid_http_status)
   

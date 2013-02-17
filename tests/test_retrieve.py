@@ -2,10 +2,11 @@
 """
 test_retrieve.py
 
-test retrieving keys in varying ways
+test retrieving entire keys to memory
 """
 from hashlib import md5
 import logging
+import random
 
 from twisted.python import log
 from twisted.internet import defer
@@ -23,7 +24,7 @@ _failure_count = 0
 
 def _retrieve_result(result, state, key):
     """
-    callback for successful result of an individual list keys request
+    callback for successful result of an individual retrieve request
     """
     global _pending_retrieve_test_count, _error_count
     _pending_retrieve_test_count -= 1
@@ -42,11 +43,19 @@ def _retrieve_result(result, state, key):
     else:
         log.msg("retrieve %s successful" % (key, ))
 
+        # choose a random slice to set up the slice test
+        slice_offset = random.randint(0, len(result))
+        slice_size = random.randint(1, len(result)-slice_offset)
+        slice_md5 = md5(result[slice_offset:slice_offset+slice_size])
+        state["slice-data"][key] = {"offset" : slice_offset,
+                                    "size"   : slice_size,
+                                    "md5"    : slice_md5,}
+
     if _pending_retrieve_test_count == 0:
         retrieve_test_complete_deferred.callback((_error_count, 
                                                    _failure_count))
 
-def _retrieve_error(failure, state, key):
+def _retrieve_error(failure, _state, key):
     """
     errback for failure of an individual retrieve request
     """
@@ -82,4 +91,3 @@ def start_retrieve_tests(state):
         deferred.addErrback(_retrieve_error, state, key)
 
         _pending_retrieve_test_count += 1
-
