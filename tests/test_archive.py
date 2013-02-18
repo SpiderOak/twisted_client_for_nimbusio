@@ -17,8 +17,7 @@ from twisted_client_for_nimbusio.rest_api import compute_archive_path
 
 from twisted_client_for_nimbusio.requester import start_collection_request
 from twisted_client_for_nimbusio.pass_thru_producer import PassThruProducer
-from twisted_client_for_nimbusio.bufferred_response_protocol import \
-    BufferredResponseProtocol
+from twisted_client_for_nimbusio.buffered_consumer import BufferedConsumer
 
 archive_complete_deferred = defer.Deferred()
 _pending_archive_count = 0
@@ -31,14 +30,14 @@ def _data_string(length):
     """
     return "".join([random.choice(printable) for _ in range(length)])
 
-def _archive_result(result_buffer, state, key):
+def _archive_result(_result, state, key, consumer):
     """
     callback for successful completion of an individual archive
     """
     global _pending_archive_count
     _pending_archive_count -= 1  
 
-    result = json.loads(result_buffer)  
+    result = json.loads(consumer.buffer)  
 
     log.msg("archive %s successful: version = %s %d pending" % (
             key,
@@ -51,7 +50,7 @@ def _archive_result(result_buffer, state, key):
     if _pending_archive_count == 0:
         archive_complete_deferred.callback((_error_count, _failure_count, ))
 
-def _archive_error(failure, state, key):
+def _archive_error(failure, _state, key):
     """
     errback for failure of an individual archive
     """
@@ -84,8 +83,9 @@ def _feed_random_producer(state):
     key = random.choice(keys)
     log.msg("choosing %s from %s keys to feed" % (key, len(keys), ),
             logLevel=logging.DEBUG)
-    data_length = min(1024 * 1024, 
-                      state["key-data"][key]["producer"].bytes_remaining_to_write)
+    data_length = \
+        min(1024 * 1024, 
+            state["key-data"][key]["producer"].bytes_remaining_to_write)
     data = _data_string(data_length)
     state["key-data"][key]["producer"].feed(data)
     state["key-data"][key]["md5"].update(data)
@@ -112,6 +112,8 @@ def start_archives(state):
         key = "".join([prefix, state["separator"], "key_%05d" % (i+1, )])
         log.msg("starting archive for %r" % (key, ), logLevel=logging.DEBUG)
 
+        consumer = BufferedConsumer()
+
         path = compute_archive_path(key)
 
         length = random.randint(state["args"].min_file_size, 
@@ -127,9 +129,9 @@ def start_archives(state):
                                             "POST", 
                                             state["collection-name"],
                                             path, 
-                                            BufferredResponseProtocol, 
+                                            response_consumer=consumer, 
                                             body_producer=producer)
-        deferred.addCallback(_archive_result, state, key)
+        deferred.addCallback(_archive_result, state, key, consumer)
         deferred.addErrback(_archive_error, state, key)
 
         _pending_archive_count += 1

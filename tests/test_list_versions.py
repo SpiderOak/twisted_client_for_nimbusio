@@ -13,22 +13,21 @@ from twisted.internet import defer
 from twisted_client_for_nimbusio.rest_api import compute_list_versions_path
 
 from twisted_client_for_nimbusio.requester import start_collection_request
-from twisted_client_for_nimbusio.bufferred_response_protocol import \
-    BufferredResponseProtocol
+from twisted_client_for_nimbusio.buffered_consumer import BufferedConsumer
 
 list_versions_test_complete_deferred = defer.Deferred()
 _pending_list_versions_test_count = 0
 _error_count = 0
 _failure_count = 0
 
-def _list_versions_result(result_buffer, state, prefix):
+def _list_versions_result(_result, state, prefix, consumer):
     """
     callback for successful result of an individual list versions request
     """
     global _pending_list_versions_test_count, _error_count
     _pending_list_versions_test_count -= 1
 
-    result = json.loads(result_buffer)
+    result = json.loads(consumer.buffer)
 
     expected_versions = set([state["key-data"][key]["version-identifier"] \
                             for key in state["key-data"].keys() \
@@ -50,15 +49,16 @@ def _list_versions_result(result_buffer, state, prefix):
         list_versions_test_complete_deferred.callback((_error_count, 
                                                        _failure_count, ))
 
-def _list_versions_error(failure, state, prefix):
+def _list_versions_error(failure, _state, prefix):
     """
     errback for failure of an individual list_versions request
     """
     global _pending_list_versions_test_count, _failure_count
     _pending_list_versions_test_count -= 1
 
-    log.msg("list_versions %s Failure %s" % (prefix, failure.getErrorMessage(), ), 
-        logLevel=logging.ERROR)
+    log.msg("list_versions %s Failure %s" % (
+            prefix, failure.getErrorMessage(), ), 
+            logLevel=logging.ERROR)
 
     _failure_count += 1
 
@@ -78,14 +78,15 @@ def start_list_versions_tests(state):
         log.msg("listing versions for prefix '%s'" % (prefix, ), 
                 logLevel=logging.DEBUG)
 
-        path = compute_list_versions_path(prefix=prefix)
+        consumer = BufferedConsumer()
 
+        path = compute_list_versions_path(prefix=prefix)
         deferred = start_collection_request(state["identity"],
                                             "GET", 
                                             state["collection-name"],
                                             path,
-                                            BufferredResponseProtocol)
-        deferred.addCallback(_list_versions_result, state, prefix)
+                                            response_consumer=consumer)
+        deferred.addCallback(_list_versions_result, state, prefix, consumer)
         deferred.addErrback(_list_versions_error, state, prefix)
 
         _pending_list_versions_test_count += 1

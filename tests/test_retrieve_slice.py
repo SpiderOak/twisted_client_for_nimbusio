@@ -15,33 +15,34 @@ from twisted_client_for_nimbusio.rest_api import compute_retrieve_path, \
     compute_range_header_tuple
 
 from twisted_client_for_nimbusio.requester import start_collection_request
-from twisted_client_for_nimbusio.bufferred_response_protocol import \
-    BufferredResponseProtocol
+from twisted_client_for_nimbusio.buffered_consumer import BufferedConsumer
 
 retrieve_slice_test_complete_deferred = defer.Deferred()
 _pending_retrieve_slice_test_count = 0
 _error_count = 0
 _failure_count = 0
 
-def _retrieve_slice_result(result, state, key):
+def _retrieve_slice_data(_result, state, key, consumer):
     """
-    callback for successful result of an individual retrieve slice request
+    callback for successful data of an individual retrieve slice request
     """
     global _pending_retrieve_slice_test_count, _error_count
     _pending_retrieve_slice_test_count -= 1
 
-    result_md5 = md5(result)
+    data = consumer.buffer
 
-    if len(result) != state["slice-data"][key]["size"]:
+    data_md5 = md5(data)
+
+    if len(data) != state["slice-data"][key]["size"]:
         log.err("retrieve %s (%s, %s) size mismatch %s != %s" % (
                 key, 
                 state["slice-data"][key]["offset"],
                 state["slice-data"][key]["size"],
-                len(result), 
+                len(data), 
                 state["slice-data"][key]["size"], ),
                 logLevel=logging.ERROR)        
         _error_count += 1    
-    elif result_md5.digest() != state["slice-data"][key]["md5"].digest():
+    elif data_md5.digest() != state["slice-data"][key]["md5"].digest():
         log.err("retrieve_slice %s (%s, %s) md5 mismatch" % (
                 key, 
                 state["slice-data"][key]["offset"],
@@ -91,6 +92,8 @@ def start_retrieve_slice_tests(state):
                 state["slice-data"][key]["size"], ), 
                 logLevel=logging.DEBUG)
 
+        consumer = BufferedConsumer()
+
         path = compute_retrieve_path(key)
         range_header_tuple = \
             compute_range_header_tuple(state["slice-data"][key]["offset"],
@@ -102,10 +105,10 @@ def start_retrieve_slice_tests(state):
                                             "GET", 
                                             state["collection-name"],
                                             path,
-                                            BufferredResponseProtocol,
+                                            response_consumer=consumer,
                                             additional_headers=headers,
                                             valid_http_status=expected_status)
-        deferred.addCallback(_retrieve_slice_result, state, key)
+        deferred.addCallback(_retrieve_slice_data, state, key, consumer)
         deferred.addErrback(_retrieve_slice_error, state, key)
 
         _pending_retrieve_slice_test_count += 1

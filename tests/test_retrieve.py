@@ -14,29 +14,30 @@ from twisted.internet import defer
 from twisted_client_for_nimbusio.rest_api import compute_retrieve_path
 
 from twisted_client_for_nimbusio.requester import start_collection_request
-from twisted_client_for_nimbusio.bufferred_response_protocol import \
-    BufferredResponseProtocol
+from twisted_client_for_nimbusio.buffered_consumer import BufferedConsumer
 
 retrieve_test_complete_deferred = defer.Deferred()
 _pending_retrieve_test_count = 0
 _error_count = 0
 _failure_count = 0
 
-def _retrieve_result(result, state, key):
+def _retrieve_data(_result, state, key, consumer):
     """
-    callback for successful result of an individual retrieve request
+    callback for successful data of an individual retrieve request
     """
     global _pending_retrieve_test_count, _error_count
     _pending_retrieve_test_count -= 1
 
-    result_md5 = md5(result)
+    data = consumer.buffer
 
-    if len(result) != state["key-data"][key]["length"]:
+    data_md5 = md5(data)
+
+    if len(data) != state["key-data"][key]["length"]:
         log.err("retrieve %s size mismatch %s != %s" % (
-                key, len(result), state["key-data"][key]["length"], ),
+                key, len(data), state["key-data"][key]["length"], ),
                 logLevel=logging.ERROR)        
         _error_count += 1    
-    elif result_md5.digest() != state["key-data"][key]["md5"].digest():
+    elif data_md5.digest() != state["key-data"][key]["md5"].digest():
         log.err("retrieve %s md5 mismatch" % (key, ),
                 logLevel=logging.ERROR)        
         _error_count += 1
@@ -44,9 +45,9 @@ def _retrieve_result(result, state, key):
         log.msg("retrieve %s successful" % (key, ))
 
         # choose a random slice to set up the slice test
-        slice_offset = random.randint(0, len(result))
-        slice_size = random.randint(1, len(result)-slice_offset)
-        slice_md5 = md5(result[slice_offset:slice_offset+slice_size])
+        slice_offset = random.randint(0, len(data))
+        slice_size = random.randint(1, len(data)-slice_offset)
+        slice_md5 = md5(data[slice_offset:slice_offset+slice_size])
         state["slice-data"][key] = {"offset" : slice_offset,
                                     "size"   : slice_size,
                                     "md5"    : slice_md5,}
@@ -80,14 +81,15 @@ def start_retrieve_tests(state):
     for key in state["key-data"].keys():
         log.msg("retrieving key '%s'" % (key, ), logLevel=logging.DEBUG)
 
-        path = compute_retrieve_path(key)
+        consumer = BufferedConsumer()
 
+        path = compute_retrieve_path(key)
         deferred = start_collection_request(state["identity"],
                                             "GET", 
                                             state["collection-name"],
                                             path,
-                                            BufferredResponseProtocol)
-        deferred.addCallback(_retrieve_result, state, key)
+                                            response_consumer=consumer)
+        deferred.addCallback(_retrieve_data, state, key, consumer)
         deferred.addErrback(_retrieve_error, state, key)
 
         _pending_retrieve_test_count += 1

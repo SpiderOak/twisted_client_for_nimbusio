@@ -20,6 +20,9 @@ from lumberyard.http_util import compute_collection_hostname, \
         current_timestamp, \
         compute_authentication_string
 
+from twisted_client_for_nimbusio.response_producer_protocol import \
+    ResponseProducerProtocol 
+
 _connection_timeout = float(os.environ.get("NIMBUSIO_CONNECTION_TIMEOUT", 
                                            "360.0"))
 _service_ssl = os.environ.get("NIMBUS_IO_SERVICE_SSL", "0") != "0"
@@ -52,6 +55,11 @@ def _request_callback(response,
                       valid_http_status, 
                       response_protocol, 
                       final_deferred):
+    """
+    successful result of HTTP request
+    If the user has supplied a response consumer, use the response_protocol
+    otherwise, push the headers to the deferred
+    """
 
     if not response.code in valid_http_status:            
         error_message = "Invalid HTTP Status: (%s) %s expecting %s" % (
@@ -62,7 +70,7 @@ def _request_callback(response,
                 logLevel=logging.ERROR)
         final_deferred.errback(error_message)
     elif response_protocol is not None:
-        response.deliverBody(response_protocol(final_deferred))
+        response.deliverBody(response_protocol)
     else:
         headers = dict(response.headers.getAllRawHeaders())
         final_deferred.callback(headers)
@@ -76,7 +84,7 @@ def start_request(identity,
                   method, 
                   hostname, 
                   path, 
-                  response_protocol=None, 
+                  response_consumer=None, 
                   body_producer=None,
                   additional_headers=None,
                   valid_http_status=frozenset([httplib.OK, ])):
@@ -98,8 +106,9 @@ def start_request(identity,
         the path prt of a URI. Usually computed by a function from
         twisted_client_for_nimbusio.rest_api
 
-    response_protocol
-        An IProtocol for receving the response from the server
+    response_consumer
+        An implementor of IConsumer for receving the response from the server
+        May be None if no response is expected
 
     body_producer
         An IBodyProducer to produce data to upload to the nimbus.io server
@@ -121,6 +130,11 @@ def start_request(identity,
     agent = Agent(reactor)
     log.msg("requesting %s '%r" % (method, uri, ), logLevel=logging.DEBUG)
     request_deferred = agent.request(method, uri, headers, body_producer)
+    if response_consumer is None:
+        response_protocol = None
+    else:
+        response_protocol = ResponseProducerProtocol(final_deferred)
+        response_consumer.registerProducer(response_protocol, True)
 
     request_deferred.addCallback(_request_callback, 
                                  valid_http_status, 
@@ -134,7 +148,7 @@ def start_collection_request(identity,
                              method, 
                              collection_name, 
                              path, 
-                             response_protocol=None, 
+                             response_consumer=None, 
                              body_producer=None,
                              additional_headers=None,
                              valid_http_status=frozenset([httplib.OK, ])):
@@ -147,7 +161,7 @@ def start_collection_request(identity,
                          method, 
                          hostname, 
                          path, 
-                         response_protocol, 
+                         response_consumer, 
                          body_producer,
                          additional_headers,
                          valid_http_status)
