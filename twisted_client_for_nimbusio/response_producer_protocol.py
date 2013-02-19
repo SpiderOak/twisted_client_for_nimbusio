@@ -25,17 +25,40 @@ class ResponseProducerProtocol(Protocol):
     implements(IPushProducer)
     def __init__(self, deferred):
         self._deferred = deferred
+        self._transport = None
         self._consumer = None
 
-    def addConsumer(self, consumer):
-        assert self._consumer is None
-        self._consumer = consumer
+    def makeConnection(self, transport):
+        """
+        overload Protocol.makeConnection in order to get a reference to the
+        transport
+        """
+        log.msg("ResponseProducerProtocol makeConnection", 
+                logLevel=logging.DEBUG)
+        self._transport = transport
+        Protocol.makeConnection(self, transport)
+
+    def connectionMade(self):
+        """
+        overload Protocol.connectionMade to verify that we have a connection
+        """
+        log.msg("ResponseProducerProtocol connectionMade", 
+                logLevel=logging.DEBUG)
+        Protocol.connectionMade(self)
 
     def dataReceived(self, data_bytes):
+        """
+        overload Protocol.dataReceived in order to get the data
+        """
         assert self._consumer is not None
         self._consumer.write(data_bytes)
 
     def connectionLost(self, reason=ResponseDone):
+        """
+        overload Protocol.connectionLost to handle disconnect
+        """
+        Protocol.connectionLost(self, reason)
+        self._transport = None
         if reason.check(ResponseDone):
             self._deferred.callback(True)
         else:
@@ -43,18 +66,40 @@ class ResponseProducerProtocol(Protocol):
                     logLevel=logging.ERROR)
             self._deferred.errback(reason)
 
+    def addConsumer(self, consumer):
+        assert self._consumer is None
+        self._consumer = consumer
+
     def stopProducing(self):
-        log.err("ResponseProducerProtocol stopProducing", 
-                logLevel=logging.ERROR)
-        self._deferred.errback("stopProducing")
+        """
+        Implement IPushProducer.stopProducing
+        """
+        if self._transport is not None:
+            log.msg("ResponseProducerProtocol stopProducing", 
+                    logLevel=logging.DEBUG)
+            self._transport.stopProducing()
+        else:
+            log.msg("ResponseProducerProtocol stopProducing no transport", 
+                    logLevel=logging.WARN)
         
     def pauseProducing(self):
-        log.err("ResponseProducerProtocol pauseProducing", 
-                logLevel=logging.ERROR)
-        self._deferred.errback("pauseProducing")
+        """
+        Implement IPushProducer.pauseProducing
+        """
+        log.msg("ResponseProducerProtocol pauseProducing", 
+                logLevel=logging.DEBUG)
+        self._transport.pauseProducing()
         
     def resumeProducing(self):
-        log.err("ResponseProducerProtocol resumeProducing", 
-                logLevel=logging.ERROR)
-        self._deferred.errback("resumeProducing")
+        """
+        Implement IPushProducer.resumeProducing
+        """
+        if self._transport is not None:
+            log.msg("ResponseProducerProtocol resumeProducing", 
+                    logLevel=logging.DEBUG)
+            self._transport.resumeProducing()
+        else:
+            log.msg("ResponseProducerProtocol resumeProducing no transport", 
+                    logLevel=logging.WARN)
+
         
