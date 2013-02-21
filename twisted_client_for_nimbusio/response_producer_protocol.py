@@ -35,7 +35,6 @@ class ResponseProducerProtocol(Protocol):
         """
         log.msg("ResponseProducerProtocol makeConnection", 
                 logLevel=logging.DEBUG)
-        self._transport = transport
         Protocol.makeConnection(self, transport)
 
     def connectionMade(self):
@@ -58,7 +57,6 @@ class ResponseProducerProtocol(Protocol):
         overload Protocol.connectionLost to handle disconnect
         """
         Protocol.connectionLost(self, reason)
-        self._transport = None
         if reason.check(ResponseDone):
             self._deferred.callback(True)
         else:
@@ -69,37 +67,5 @@ class ResponseProducerProtocol(Protocol):
     def addConsumer(self, consumer):
         assert self._consumer is None
         self._consumer = consumer
-
-    def stopProducing(self):
-        """
-        Implement IPushProducer.stopProducing
-        """
-        if self._transport is not None:
-            log.msg("ResponseProducerProtocol stopProducing", 
-                    logLevel=logging.DEBUG)
-            self._transport.stopProducing()
-        else:
-            log.msg("ResponseProducerProtocol stopProducing no transport", 
-                    logLevel=logging.WARN)
-        
-    def pauseProducing(self):
-        """
-        Implement IPushProducer.pauseProducing
-        """
-        log.msg("ResponseProducerProtocol pauseProducing", 
-                logLevel=logging.DEBUG)
-        self._transport.pauseProducing()
-        
-    def resumeProducing(self):
-        """
-        Implement IPushProducer.resumeProducing
-        """
-        if self._transport is not None:
-            log.msg("ResponseProducerProtocol resumeProducing", 
-                    logLevel=logging.DEBUG)
-            self._transport.resumeProducing()
-        else:
-            log.msg("ResponseProducerProtocol resumeProducing no transport", 
-                    logLevel=logging.WARN)
 
         

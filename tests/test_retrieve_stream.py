@@ -24,7 +24,6 @@ class TestStreamConsumer(object):
     """
     implements(IConsumer)
     def __init__(self):
-        self._producer = None
         self._bytes_read = 0
         self._md5 = md5()
 
@@ -37,33 +36,13 @@ class TestStreamConsumer(object):
         return self._md5.digest()
 
     def registerProducer(self, producer, _streaming):
-        self._producer = producer
-        self._producer.addConsumer(self)
-
-    def unregisterProducer(self):
-        log.msg("TestStreamConsumer 'unregisterProducer'",
-                logLevel=logging.DEBUG)
-        self._producer = None
+        producer.addConsumer(self)
 
     def write(self, data):
-#        self._producer.pauseProducing()
-
         # simulate some slow process
         self._bytes_read += len(data)
         self._md5.update(data)
-        reactor.callLater(5, self._ready)
 
-    def done(self):
-        """
-        mark this consumer a done, to break our _ready loop
-        """
-        self._producer.stopProducing()
-        self.unregisterProducer()
-
-    def _ready(self):
-        pass
-#        if self._producer is not None:
-#            self._producer.resumeProducing()        
 
 retrieve_stream_test_complete_deferred = defer.Deferred()
 _pending_retrieve_stream_test_count = 0
@@ -76,8 +55,6 @@ def _retrieve_data(_result, state, key, consumer):
     """
     global _pending_retrieve_stream_test_count, _error_count
     _pending_retrieve_stream_test_count -= 1
-
-    consumer.done()
 
     if consumer.bytes_read != state["key-data"][key]["length"]:
         log.err("retrieve_stream %s size mismatch %s != %s" % (
