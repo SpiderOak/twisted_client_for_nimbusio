@@ -7,8 +7,8 @@ export NIMBUS_IO_SERVICE_PORT="9000"
 export NIMBUS_IO_SERVICE_HOST="dev.nimbus.io"
 export NIMBUS_IO_SERVICE_DOMAIN="dev.nimbus.io"
 export NIMBUS_IO_SERVICE_SSL="0"
-export PYTHONPATH="${HOME}/twisted_client_for_nimbusio"
+export PYTHONPATH="${HOME}/git/twisted_client_for_nimbusio"
 
 PYTHON="python2.7"
 
-"${PYTHON}" "${HOME}/twisted_client_for_nimbusio/tests/test_client.py" $@
+"${PYTHON}" "${HOME}/git/twisted_client_for_nimbusio/tests/test_client.py" $@
