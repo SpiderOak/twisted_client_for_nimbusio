@@ -59,3 +59,28 @@ def compute_range_header_tuple(slice_offset, slice_size):
                                           slice_offset + slice_size - 1, )
     assert slice_offset is not None
     return "Range", "bytes=%d-" % (slice_offset, )
+
+def compute_start_conjoined_path(key):
+    """
+    start a conjoined archive
+    """
+    kwargs = {"action" : "start"}
+    return compute_uri_path("conjoined", key, **kwargs)
+
+def compute_abort_conjoined_path(conjoined_identifier, key):
+    """
+    start a conjoined archive
+    """
+    kwargs = {"action"                : "abort",
+              "conjoined_identifier"  : conjoined_identifier}
+
+    uri = compute_uri_path("conjoined", key, **kwargs)
+
+def compute_finish_conjoined_path(key, conjoined_identifier):
+    """
+    start a conjoined archive
+    """
+    kwargs = {"action"                : "finish",
+              "conjoined_identifier"  : conjoined_identifier}
+
+    return compute_uri_path("conjoined", key, **kwargs)

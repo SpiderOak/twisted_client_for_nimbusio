@@ -26,7 +26,10 @@ import motoboto
 from motoboto.identity import load_identity_from_file
 
 from commandline import parse_commandline
-from test_archive import archive_complete_deferred, start_archives
+from test_single_part_archive import single_part_archive_complete_deferred, \
+    start_single_part_archives
+from test_conjoined_archive import conjoined_archive_complete_deferred, \
+    start_conjoined_archives
 from test_head import head_test_complete_deferred, start_head_tests
 from test_list_keys import list_keys_test_complete_deferred, \
     start_list_keys_tests
@@ -51,6 +54,7 @@ def _create_state(args, identity, collection_name):
             "identity"          : identity,
             "collection-name"   : collection_name,
             "key-data"          : dict(),
+            "conjoined-data"    : dict(),
             "slice-data"        : dict()}
 
 def _initialize_logging():
@@ -229,8 +233,9 @@ def _list_keys_test_failure(failure, _state):
     """
     global _total_failures
 
-    log.msg("list_keys test failed: Failure %s" % (failure.getErrorMessage(), ), 
-        logLevel=logging.ERROR)
+    log.msg("list_keys test failed: Failure %s" % (
+            failure.getErrorMessage(), ), 
+            logLevel=logging.ERROR)
 
     _total_failures += 1
 
@@ -268,14 +273,14 @@ def _head_test_failure(failure, _state):
     # now we can start the next phase of the test
     reactor.callLater(0, start_list_keys_tests, state)
 
-def _archive_complete(result, state):
+def _conjoined_archive_complete(result, state):
     """
-    callback for completion of all archives 
+    callback for completion of all conjoined archives 
     """
     global _total_errors, _total_failures
 
     error_count, failure_count = result
-    log.msg("all archives complete. %d errors, %d failures" % (
+    log.msg("all conjoined archives complete. %d errors, %d failures" % (
             error_count, failure_count, ),
             logLevel=logging.INFO)
 
@@ -285,19 +290,52 @@ def _archive_complete(result, state):
     # now we can start the next phase of the test
     reactor.callLater(0, start_head_tests, state)
 
-def _archive_failure(failure):
+def _conjoined_archive_failure(failure):
     """
-    errback for failure of archives
+    errback for failure of conjoined archives
     """
     global _total_failures
 
-    log.msg("archives failed: Failure %s" % (failure.getErrorMessage(), ), 
-        logLevel=logging.ERROR)
+    log.msg("conjoined archives failed: Failure %s" % (
+            failure.getErrorMessage(), ), 
+            logLevel=logging.ERROR)
 
     _total_failures += 1
 
     # now we can start the next phase of the test
     reactor.callLater(0, start_head_tests, state)
+
+def _single_part_archive_complete(result, state):
+    """
+    callback for completion of all single part archives 
+    """
+    global _total_errors, _total_failures
+
+    error_count, failure_count = result
+    log.msg("all single part archives complete. %d errors, %d failures" % (
+            error_count, failure_count, ),
+            logLevel=logging.INFO)
+
+    _total_errors += error_count
+    _total_failures += failure_count
+
+    # now we can start the next phase of the test
+    reactor.callLater(0, start_conjoined_archives, state)
+
+def _single_part_archive_failure(failure):
+    """
+    errback for failure of single part archives
+    """
+    global _total_failures
+
+    log.msg("single part archives failed: Failure %s" % (
+            failure.getErrorMessage(), ), 
+            logLevel=logging.ERROR)
+
+    _total_failures += 1
+
+    # now we can start the next phase of the test
+    reactor.callLater(0, start_conjoined_archives, state)
 
 if __name__ == "__main__":
     _initialize_logging()
@@ -315,17 +353,23 @@ if __name__ == "__main__":
 
     state = _create_state(args, identity, collection_name)
 
-    archive_complete_deferred.addCallback(_archive_complete, state) 
-    archive_complete_deferred.addErrback(_archive_failure, state)
+    single_part_archive_complete_deferred.addCallback(
+        _single_part_archive_complete, state) 
+    single_part_archive_complete_deferred.addErrback(
+        _single_part_archive_failure, state)
+    conjoined_archive_complete_deferred.addCallback(
+        _conjoined_archive_complete, state) 
+    conjoined_archive_complete_deferred.addErrback(
+        _conjoined_archive_failure, state)
     head_test_complete_deferred.addCallback(_head_test_complete, state) 
     head_test_complete_deferred.addErrback(_head_test_failure, state)
     list_keys_test_complete_deferred.addCallback(_list_keys_test_complete, 
                                                  state) 
     list_keys_test_complete_deferred.addErrback(_list_keys_test_failure, state)
-    list_versions_test_complete_deferred.addCallback(_list_versions_test_complete, 
-                                                     state) 
-    list_versions_test_complete_deferred.addErrback(_list_versions_test_failure, 
-                                                    state)
+    list_versions_test_complete_deferred.addCallback(
+        _list_versions_test_complete, state) 
+    list_versions_test_complete_deferred.addErrback(
+        _list_versions_test_failure, state)
     retrieve_test_complete_deferred.addCallback(_retrieve_test_complete, state) 
     retrieve_test_complete_deferred.addErrback(_retrieve_test_failure, state)
     retrieve_slice_test_complete_deferred.addCallback(
@@ -337,6 +381,6 @@ if __name__ == "__main__":
     retrieve_stream_test_complete_deferred.addErrback(
         _retrieve_stream_test_failure, state)
 
-    reactor.callLater(0, start_archives, state)
+    reactor.callLater(0, start_single_part_archives, state)
 
     reactor.run()

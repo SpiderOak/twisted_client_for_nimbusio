@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-test_archive.py 
+test_single_part_archive.py 
 
-test archiving files
+test archiving single files - not conjoined
 """
 from hashlib import md5
 import json
@@ -19,7 +19,7 @@ from twisted_client_for_nimbusio.requester import start_collection_request
 from twisted_client_for_nimbusio.pass_thru_producer import PassThruProducer
 from twisted_client_for_nimbusio.buffered_consumer import BufferedConsumer
 
-archive_complete_deferred = defer.Deferred()
+single_part_archive_complete_deferred = defer.Deferred()
 _pending_archive_count = 0
 _error_count = 0
 _failure_count = 0
@@ -48,7 +48,8 @@ def _archive_result(_result, state, key, consumer):
     state["key-data"][key]["version-identifier"] = result["version_identifier"]
 
     if _pending_archive_count == 0:
-        archive_complete_deferred.callback((_error_count, _failure_count, ))
+        single_part_archive_complete_deferred.callback((_error_count, 
+                                                        _failure_count, ))
 
 def _archive_error(failure, _state, key):
     """
@@ -62,14 +63,16 @@ def _archive_error(failure, _state, key):
         logLevel=logging.ERROR)
 
     if _pending_archive_count == 0:
-        archive_complete_deferred.callback((_error_count, _failure_count, ))
+        single_part_archive_complete_deferred.callback((_error_count, 
+                                                        _failure_count, ))
 
 def _feed_random_producer(state):
     """
     produce random data for the various body providers
     """
-    if archive_complete_deferred.called:
-        log.msg("_feed_random_producer: archive_complete_deferred called", 
+    if single_part_archive_complete_deferred.called:
+        log.msg("_feed_random_producer: " \
+                "single_part_archive_complete_deferred called", 
                 logLevel=logging.WARN)
         return
 
@@ -95,7 +98,7 @@ def _feed_random_producer(state):
                                 state["args"].max_feed_delay)
     reactor.callLater(feed_delay, _feed_random_producer, state)
 
-def start_archives(state):
+def start_single_part_archives(state):
     """
     start a group of deferred archive requests
     """
@@ -107,17 +110,18 @@ def start_archives(state):
             logLevel=logging.DEBUG)
 
     # start all the keys archiving
-    for i in range(state["args"].number_of_keys):
+    for i in range(state["args"].number_of_single_part_keys):
         prefix = random.choice(state["prefixes"])
-        key = "".join([prefix, state["separator"], "key_%05d" % (i+1, )])
+        key = "".join([prefix, state["separator"], 
+                      "single_part_key_%05d" % (i+1, )])
         log.msg("starting archive for %r" % (key, ), logLevel=logging.DEBUG)
 
         consumer = BufferedConsumer()
 
         path = compute_archive_path(key)
 
-        length = random.randint(state["args"].min_file_size, 
-                                state["args"].max_file_size)
+        length = random.randint(state["args"].min_single_part_file_size, 
+                                state["args"].max_single_part_file_size)
         producer = PassThruProducer(key, length)
 
         state["key-data"][key] = {"length"              : length,
