@@ -5,6 +5,7 @@ pass_thru_producer.py
 an IBodyProducer that passes data through to the consumer
 with bufferring to handle the consumer not being ready
 """
+from hashlib import md5
 import logging
 
 from zope.interface import implements
@@ -23,6 +24,7 @@ class PassThruProducer(object):
         self._finished_deferred = defer.Deferred()
         self._buffer = ""
         self._bytes_written = 0
+        self._md5 = md5()
 
         self._consumer = None
         self._paused = False
@@ -45,6 +47,11 @@ class PassThruProducer(object):
     def is_finished(self):
         return self._finished_deferred.called
 
+    @property 
+    def md5_digest(self):
+        assert self.is_finished
+        return self._md5.digest()
+
     def feed(self, data):
         """
         feed data to the consumer
@@ -55,11 +62,13 @@ class PassThruProducer(object):
             self._write_to_consumer(data)
 
     def _write_to_consumer(self, data):
-        log.msg("%s writing %s bytes to consumer" % (self._name, 
-                                                     len(data), ), 
+        log.msg("%s writing %s bytes to consumer" % (
+                self._name, len(data), ), 
                 logLevel=logging.DEBUG)
         self._consumer.write(data)
         self._bytes_written += len(data)
+        self._md5.update(data)
+
         if self._bytes_written >= self._length:
             log.msg("%s finished" % (self._name, ), logLevel=logging.DEBUG)
             self._finished_deferred.callback(None) 
@@ -88,4 +97,3 @@ class PassThruProducer(object):
 
     def stopProducing(self):
         log.msg("%s stopProducing" % (self._name, ), logLevel=logging.WARN)
-        self._finished_deferred.errback("stopProducing called")

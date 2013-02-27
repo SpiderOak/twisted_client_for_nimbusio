@@ -66,37 +66,26 @@ def _archive_error(failure, _state, key):
         single_part_archive_complete_deferred.callback((_error_count, 
                                                         _failure_count, ))
 
-def _feed_random_producer(state):
-    """
-    produce random data for the various body providers
-    """
+def _feed_producer(key, producer, state):
     if single_part_archive_complete_deferred.called:
-        log.msg("_feed_random_producer: " \
-                "single_part_archive_complete_deferred called", 
+        log.msg("_feed_producer: completed_deferred called", 
                 logLevel=logging.WARN)
         return
 
-    keys = [key for key in state["key-data"].keys() \
-            if not state["key-data"][key]["producer"].is_finished]
-    if len(keys) == 0:
-        log.msg("_feed_random_producers: no active keyss; exiting", 
-                logLevel=logging.DEBUG)
-        return     
+    data_length = min(1024 * 1024, producer.bytes_remaining_to_write)
 
-    key = random.choice(keys)
-    log.msg("choosing %s from %s keys to feed" % (key, len(keys), ),
-            logLevel=logging.DEBUG)
-    data_length = \
-        min(1024 * 1024, 
-            state["key-data"][key]["producer"].bytes_remaining_to_write)
     data = _data_string(data_length)
-    state["key-data"][key]["producer"].feed(data)
+    producer.feed(data)
+
     state["key-data"][key]["md5"].update(data)
 
-    # call ourselves again after a random interval
+    if producer.is_finished:
+        return
+
     feed_delay = random.uniform(state["args"].min_feed_delay, 
                                 state["args"].max_feed_delay)
-    reactor.callLater(feed_delay, _feed_random_producer, state)
+
+    reactor.callLater(feed_delay, _feed_producer, key, producer, state)
 
 def start_single_part_archives(state):
     """
@@ -125,7 +114,6 @@ def start_single_part_archives(state):
         producer = PassThruProducer(key, length)
 
         state["key-data"][key] = {"length"              : length,
-                                  "producer"            : producer,
                                   "md5"                 : md5(),
                                   "version-identifier"  : None}
 
@@ -140,6 +128,8 @@ def start_single_part_archives(state):
 
         _pending_archive_count += 1
 
-    feed_delay = random.uniform(state["args"].min_feed_delay, 
-                                state["args"].max_feed_delay)
-    reactor.callLater(feed_delay, _feed_random_producer, state)
+        # loop on callLater until all archive is complete
+        feed_delay = random.uniform(state["args"].min_feed_delay, 
+                                    state["args"].max_feed_delay)
+
+        reactor.callLater(feed_delay, _feed_producer, key, producer, state)
