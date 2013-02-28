@@ -27,6 +27,7 @@ _pending_archive_count = 0
 _pending_finish_conjoined_count = 0
 _error_count = 0
 _failure_count = 0
+_key_content = dict()
 
 def _finish_conjoined_result(_result, _state, key, consumer):
     """
@@ -87,12 +88,6 @@ def _finish_conjoined(state):
 
         _pending_finish_conjoined_count += 1
 
-def _data_string(length):
-    """
-    return a 'random' string, but not cryptographically random
-    """
-    return "".join([random.choice(printable) for _ in range(length)])
-
 def _archive_result(_result, state, key, conjoined_part, consumer):
     """
     callback for successful completion of an individual archive
@@ -139,7 +134,13 @@ def _archive_error(failure, _state, key, conjoined_part):
         conjoined_archive_complete_deferred.callback((_error_count, 
                                                       _failure_count, ))
 
-def _feed_producer(key, conjoined_part, producer, state):
+def _feed_producer(key, 
+                   conjoined_part, 
+                   producer, 
+                   slice_start, 
+                   slice_end, 
+                   state):
+
     if conjoined_archive_complete_deferred.called:
         log.msg("_feed_producer: %s:%03d completed_deferred called" % (
                 key,
@@ -163,12 +164,11 @@ def _feed_producer(key, conjoined_part, producer, state):
 
     data_length = min(1024 * 1024, producer.bytes_remaining_to_write)
 
-    data = _data_string(data_length)
+    data = _key_content[key][slice_start:slice_start+data_length]
     producer.feed(data)
 
-    state["key-data"][key]["md5"].update(data)
-
-    if producer.is_finished:
+    slice_start += data_length
+    if producer.is_finished or slice_start >= len(_key_content[key]):
         return
 
     feed_delay = random.uniform(state["args"].min_feed_delay, 
@@ -179,6 +179,8 @@ def _feed_producer(key, conjoined_part, producer, state):
                       key, 
                       conjoined_part, 
                       producer, 
+                      slice_start,
+                      slice_end,
                       state)
 
 def _archive_conjoined(state):
@@ -190,22 +192,26 @@ def _archive_conjoined(state):
 
         length = random.randint(state["args"].min_conjoined_file_size, 
                                 state["args"].max_conjoined_file_size)
+        _key_content[key] = \
+            "".join([random.choice(printable) for _ in range(length)])\
 
-        state["key-data"][key] = {"length"              : length,
-                                  "md5"                 : md5(),
-                                  "version-identifier"  : None}
+        state["key-data"][key] = {"length"            : length,
+                                  "md5"               : md5(_key_content[key]),
+                                  "version-identifier": None}
 
-        bytes_to_archive = length
+        slice_start = 0
+        slice_end = slice_start + state["args"].max_conjoined_part_size
+
         conjoined_part = 0
-        while bytes_to_archive > 0:
+        while slice_start < length:
             conjoined_part += 1
 
             producer_name = "%s_%03d" % (key, conjoined_part)
 
-            if bytes_to_archive > state["args"].max_conjoined_part_size:
+            if slice_end <= length:
                 producer_length = state["args"].max_conjoined_part_size
             else:
-                producer_length = bytes_to_archive
+                producer_length = length - slice_start 
 
             consumer = BufferedConsumer()
 
@@ -240,9 +246,12 @@ def _archive_conjoined(state):
                               key, 
                               conjoined_part, 
                               producer, 
+                              slice_start,
+                              slice_end,
                               state)
 
-            bytes_to_archive -= producer_length
+            slice_start = slice_end
+            slice_end = slice_start + state["args"].max_conjoined_part_size
 
 def _start_conjoined_result(_result, state, key, consumer):
     """
