@@ -127,8 +127,13 @@ def start_request(identity,
         for key, value in additional_headers.items():
             headers.addRawHeader(key, value)
 
-    agent = Agent(reactor)
-    log.msg("requesting %s '%r" % (method, uri, ), logLevel=logging.DEBUG)
+    agent = Agent(reactor, connectTimeout=_connection_timeout)
+    log.msg("requesting %s '%r, connection_timeout = %s" % (
+            method, 
+            uri, 
+            _connection_timeout), 
+            logLevel=logging.DEBUG)
+
     request_deferred = agent.request(method, uri, headers, body_producer)
     if response_consumer is None:
         response_protocol = None
