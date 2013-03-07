@@ -28,6 +28,9 @@ _connection_timeout = float(os.environ.get("NIMBUSIO_CONNECTION_TIMEOUT",
 _service_ssl = os.environ.get("NIMBUS_IO_SERVICE_SSL", "0") != "0"
 _agent_name = "Twisted Client for Nimbus.io"
 
+class NimbusioError(Exception):
+    pass
+
 def _compute_uri(hostname, path):
     scheme = ("HTTPS" if _service_ssl else "HTTP")
     return "".join([scheme, "://", hostname, path])
@@ -68,8 +71,9 @@ def _request_callback(response,
                         valid_http_status)
         log.msg("_request_callback %s" % (error_message, ), 
                 logLevel=logging.ERROR)
-        final_deferred.errback(error_message)
-    elif response_protocol is not None:
+        raise NimbusioError(error_message)
+
+    if response_protocol is not None:
         response.deliverBody(response_protocol)
     else:
         headers = dict(response.headers.getAllRawHeaders())
@@ -127,7 +131,9 @@ def start_request(identity,
         for key, value in additional_headers.items():
             headers.addRawHeader(key, value)
 
-    agent = Agent(reactor, connectTimeout=_connection_timeout)
+#    our version of twisted is too old to have connectTimeouot :(
+#    agent = Agent(reactor, connectTimeout=_connection_timeout)
+    agent = Agent(reactor)
     log.msg("requesting %s '%r, connection_timeout = %s" % (
             method, 
             uri, 
